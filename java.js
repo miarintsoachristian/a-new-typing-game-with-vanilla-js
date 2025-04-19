@@ -1,249 +1,195 @@
-// Configuration
-const WORD_LENGTH_EQUIVALENT = 5;
 
-// Éléments DOM
-const elements = {
-    modeSelect: document.getElementById("mode"),
-    timeSelect: document.getElementById("time"),
-    restartBtn: document.getElementById("restart-btn"),
-    wordDisplay: document.getElementById("word-display"),
-    inputField: document.getElementById("input-field"),
-    timeDisplay: document.getElementById("time-display"),
-    wpmDisplay: document.getElementById("wpm"),
-    accuracyDisplay: document.getElementById("accuracy"),
-    correctDisplay: document.getElementById("correct"),
-    errorsDisplay: document.getElementById("errors")
-};
+// Variables du jeu
+let words = [];
+let currentWordIndex = 0;
+let correctChars = 0;
+let incorrectChars = 0;
+let startTime;
+let timer;
+let gameDuration = 30;
+let isPlaying = false;
+let currentDifficulty = 'easy';
 
-// Dictionnaires de mots
-const wordDictionaries = {
+// Mots par difficulté
+const wordLists = {
     easy: ["pomme", "banane", "fraise", "orange", "kiwi", "fruit", "melon", "pêche", "poire", "raisin"],
     medium: ["clavier", "écran", "souris", "chargeur", "batterie", "portable", "ordinateur", "téléphone", "imprimante", "casque"],
     hard: ["programmation", "développement", "algorithmique", "architecture", "javascript", "ordinateur", "interface", "système", "application", "réseau"]
 };
 
-// État du jeu
-const gameState = {
-    startTime: null,
-    timer: null,
-    timeLeft: 60,
-    isRunning: false,
-    isZenMode: false,
-    currentWordIndex: 0,
-    currentCharIndex: 0,
-    wordsToType: [],
-    correctChars: 0,
-    totalTypedChars: 0,
-    errors: 0,
-    correctWords: 0,
-    lastCorrect: true // Pour suivre si le dernier caractère était correct
-};
+// Éléments DOM
+const textDisplay = document.getElementById('text-display');
+const userInput = document.getElementById('user-input');
+const wpmDisplay = document.getElementById('wpm');
+const accuracyDisplay = document.getElementById('accuracy');
+const timeDisplay = document.getElementById('time');
+const newTestBtn = document.getElementById('new-test');
+const difficultyBtns = document.querySelectorAll('.difficulty-btn');
 
-// Initialisation du jeu
-function initGame() {
-    clearInterval(gameState.timer);
+// Initialisation
+init();
+
+function init() {
+    loadNewText();
+    setupEventListeners();
+}
+
+function loadNewText() {
+    // Sélectionner 10 mots aléatoires de la difficulté actuelle
+    const wordList = wordLists[currentDifficulty];
+    words = [];
     
-    gameState.wordsToType = [];
-    gameState.currentWordIndex = 0;
-    gameState.currentCharIndex = 0;
-    gameState.startTime = null;
-    gameState.isRunning = false;
-    gameState.timeLeft = parseInt(elements.timeSelect.value);
-    gameState.isZenMode = gameState.timeLeft === 0;
-    gameState.correctChars = 0;
-    gameState.totalTypedChars = 0;
-    gameState.errors = 0;
-    gameState.correctWords = 0;
-    gameState.lastCorrect = true;
-    
-    elements.timeDisplay.textContent = gameState.isZenMode ? "∞" : gameState.timeLeft;
-    elements.wpmDisplay.textContent = "0";
-    elements.accuracyDisplay.textContent = "100";
-    elements.correctDisplay.textContent = "0";
-    elements.errorsDisplay.textContent = "0";
-    
-    // Génération des mots
-    for (let i = 0; i < 50; i++) {
-        gameState.wordsToType.push(getRandomWord(elements.modeSelect.value));
+    for (let i = 0; i < 10; i++) {
+        const randomIndex = Math.floor(Math.random() * wordList.length);
+        words.push(wordList[randomIndex]);
     }
     
-    renderWords();
-    elements.inputField.value = "";
-    elements.inputField.disabled = false;
-    elements.inputField.focus();
-}
-
-// Obtient un mot aléatoire selon le mode
-function getRandomWord(mode) {
-    const wordList = wordDictionaries[mode];
-    return wordList[Math.floor(Math.random() * wordList.length)];
-}
-
-// Affiche les mots à l'écran avec coloration des caractères
-function renderWords() {
-    elements.wordDisplay.innerHTML = "";
+    currentWordIndex = 0;
+    correctChars = 0;
+    incorrectChars = 0;
     
-    gameState.wordsToType.forEach((word, wordIndex) => {
-        const wordSpan = document.createElement("span");
-        wordSpan.className = "word";
+    renderWords();
+    userInput.value = '';
+    userInput.focus();
+}
+
+function renderWords() {
+    textDisplay.innerHTML = '';
+    
+    words.forEach((word, index) => {
+        const wordSpan = document.createElement('span');
+        wordSpan.className = 'word';
+        wordSpan.textContent = word;
         
-        if (wordIndex === gameState.currentWordIndex) {
-            wordSpan.classList.add("active");
+        if (index === currentWordIndex) {
+            wordSpan.classList.add('current');
         }
         
-        // Crée des spans pour chaque caractère
-        word.split("").forEach((char, charIndex) => {
-            const charSpan = document.createElement("span");
-            charSpan.className = "char";
-            charSpan.textContent = char;
-            
-            // Coloration des caractères
-            if (wordIndex < gameState.currentWordIndex) {
-                // Mots déjà complétés (tous corrects)
-                charSpan.classList.add("correct");
-            } else if (wordIndex === gameState.currentWordIndex) {
-                // Mot en cours
-                if (charIndex < gameState.currentCharIndex) {
-                    // Caractères déjà tapés
-                    const typedChar = elements.inputField.value[charIndex];
-                    if (typedChar === char) {
-                        charSpan.classList.add("correct");
-                    } else {
-                        charSpan.classList.add("incorrect");
-                    }
-                }
-            }
-            
-            wordSpan.appendChild(charSpan);
-        });
-        
-        elements.wordDisplay.appendChild(wordSpan);
-        elements.wordDisplay.appendChild(document.createTextNode(" "));
+        textDisplay.appendChild(wordSpan);
     });
 }
 
-// Démarre le timer
-function startTimer() {
-    if (!gameState.isRunning && !gameState.isZenMode) {
-        gameState.isRunning = true;
-        gameState.startTime = Date.now();
-        
-        gameState.timer = setInterval(() => {
-            gameState.timeLeft--;
-            elements.timeDisplay.textContent = gameState.timeLeft;
-            
-            if (gameState.timeLeft <= 0) {
-                endGame();
-            }
-        }, 1000);
-    }
+function setupEventListeners() {
+    userInput.addEventListener('input', handleInput);
+    newTestBtn.addEventListener('click', startNewTest);
+    
+    difficultyBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            difficultyBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentDifficulty = btn.dataset.difficulty;
+            startNewTest();
+        });
+    });
 }
 
-// Calcule les statistiques avec la nouvelle règle de précision
-function calculateStats() {
-    if (!gameState.startTime) return { wpm: 0, accuracy: 100 };
+function handleInput(e) {
+    if (!isPlaying) {
+        startGame();
+    }
     
-    const elapsedTime = (Date.now() - gameState.startTime) / 1000;
-    const minutes = elapsedTime / 60;
-    const totalWords = gameState.correctChars / WORD_LENGTH_EQUIVALENT;
-    const wpm = minutes > 0 ? totalWords / minutes : 0;
+    const inputValue = e.target.value;
+    const currentWord = words[currentWordIndex];
     
-    // Nouveau calcul de précision : 100% si tout est correct, sinon pourcentage réel
-    let accuracy;
-    if (gameState.totalTypedChars === 0) {
-        accuracy = 100;
-    } else {
-        accuracy = (gameState.correctChars / gameState.totalTypedChars) * 100;
-        // Si le dernier caractère est correct et qu'il n'y a pas d'erreurs, 100%
-        if (gameState.lastCorrect && gameState.errors === 0) {
-            accuracy = 100;
+    if (inputValue.endsWith(' ')) {
+        if (inputValue.trim() === currentWord) {
+            correctChars += currentWord.length;
+            markWordAsCorrect();
+        } else {
+            incorrectChars += currentWord.length;
+            markWordAsIncorrect();
         }
-    }
-    
-    return { 
-        wpm: Math.round(wpm),
-        accuracy: Math.round(accuracy)
-    };
-}
-
-// Met à jour les statistiques affichées
-function updateStats() {
-    const { wpm, accuracy } = calculateStats();
-    elements.wpmDisplay.textContent = wpm;
-    elements.accuracyDisplay.textContent = accuracy;
-    elements.correctDisplay.textContent = gameState.correctWords;
-    elements.errorsDisplay.textContent = gameState.errors;
-}
-
-// Gère la saisie de l'utilisateur
-function handleInput() {
-    startTimer();
-    
-    const typedWord = elements.inputField.value;
-    const targetWord = gameState.wordsToType[gameState.currentWordIndex];
-    gameState.currentCharIndex = typedWord.length;
-    
-    // Vérifie si le dernier caractère est correct
-    if (typedWord.length > 0) {
-        const lastTypedChar = typedWord[typedWord.length - 1];
-        const targetChar = targetWord[typedWord.length - 1];
-        gameState.lastCorrect = lastTypedChar === targetChar;
         
-        if (!gameState.lastCorrect) {
-            gameState.errors++;
-        }
-    }
-    
-    // Vérifie si le mot est complété
-    if (typedWord === targetWord + " ") {
-        gameState.correctChars += targetWord.length;
-        gameState.totalTypedChars += targetWord.length;
-        gameState.correctWords++;
+        e.target.value = '';
+        currentWordIndex++;
         
-        gameState.currentWordIndex++;
-        gameState.currentCharIndex = 0;
-        elements.inputField.value = "";
-        gameState.lastCorrect = true; // Réinitialise pour le nouveau mot
-        
-        // Ajoute plus de mots si nécessaire
-        if (gameState.currentWordIndex > gameState.wordsToType.length - 10) {
-            for (let i = 0; i < 10; i++) {
-                gameState.wordsToType.push(getRandomWord(elements.modeSelect.value));
-            }
+        if (currentWordIndex >= words.length) {
+            loadNewText();
+        } else {
+            renderWords();
         }
     } else {
-        // Compte les caractères corrects
-        let correct = 0;
-        for (let i = 0; i < typedWord.length && i < targetWord.length; i++) {
-            if (typedWord[i] === targetWord[i]) correct++;
-        }
-        
-        gameState.correctChars = gameState.correctChars - (gameState.currentCharIndex - correct) + correct;
-        gameState.totalTypedChars = gameState.totalTypedChars - gameState.currentCharIndex + typedWord.length;
+        updateCurrentWordHighlight(inputValue, currentWord);
     }
     
-    renderWords();
     updateStats();
 }
 
-// Termine la partie
-function endGame() {
-    clearInterval(gameState.timer);
-    gameState.isRunning = false;
-    elements.inputField.disabled = true;
-    
-    // Affiche les résultats finaux
-    const { wpm, accuracy } = calculateStats();
-    setTimeout(() => {
-        alert(`Test terminé !\nMots/min: ${wpm}\nPrécision: ${accuracy}%\nMots corrects: ${gameState.correctWords}\nErreurs: ${gameState.errors}`);
-    }, 100);
+function markWordAsCorrect() {
+    const wordElements = document.querySelectorAll('.word');
+    if (currentWordIndex < wordElements.length) {
+        wordElements[currentWordIndex].classList.add('correct');
+        wordElements[currentWordIndex].classList.remove('incorrect');
+    }
 }
 
-// Événements
-elements.inputField.addEventListener("input", handleInput);
-elements.modeSelect.addEventListener("change", initGame);
-elements.timeSelect.addEventListener("change", initGame);
-elements.restartBtn.addEventListener("click", initGame);
+function markWordAsIncorrect() {
+    const wordElements = document.querySelectorAll('.word');
+    if (currentWordIndex < wordElements.length) {
+        wordElements[currentWordIndex].classList.add('incorrect');
+        wordElements[currentWordIndex].classList.remove('correct');
+    }
+}
 
-// Initialisation
-initGame();
+function updateCurrentWordHighlight(inputValue, currentWord) {
+    const wordElements = document.querySelectorAll('.word');
+    if (currentWordIndex >= wordElements.length) return;
+    
+    const currentWordElement = wordElements[currentWordIndex];
+    currentWordElement.classList.remove('correct', 'incorrect');
+    
+    if (inputValue === currentWord.substring(0, inputValue.length)) {
+        currentWordElement.classList.add('correct');
+    } else {
+        currentWordElement.classList.add('incorrect');
+    }
+}
+
+function startGame() {
+    isPlaying = true;
+    startTime = new Date();
+    
+    timer = setInterval(() => {
+        const currentTime = new Date();
+        const elapsedSeconds = Math.floor((currentTime - startTime) / 1000);
+        const remainingTime = gameDuration - elapsedSeconds;
+        
+        timeDisplay.textContent = `${remainingTime}s`;
+        
+        if (elapsedSeconds >= gameDuration) {
+            endGame();
+        }
+        
+        updateStats();
+    }, 1000);
+}
+
+function endGame() {
+    clearInterval(timer);
+    isPlaying = false;
+    userInput.disabled = true;
+    updateStats();
+}
+
+function updateStats() {
+    const currentTime = isPlaying ? new Date() : new Date(startTime.getTime() + gameDuration * 1000);
+    const elapsedMinutes = (currentTime - startTime) / 60000;
+    
+    const wpm = Math.round((correctChars / 5) / elapsedMinutes) || 0;
+    wpmDisplay.textContent = wpm;
+    
+    const totalChars = correctChars + incorrectChars;
+    const accuracy = totalChars > 0 ? Math.round((correctChars / totalChars) * 100) : 0;
+    accuracyDisplay.textContent = `${accuracy}%`;
+}
+
+function startNewTest() {
+    clearInterval(timer);
+    isPlaying = false;
+    userInput.disabled = false;
+    loadNewText();
+    
+    wpmDisplay.textContent = '0';
+    accuracyDisplay.textContent = '0%';
+    timeDisplay.textContent = `${gameDuration}s`;
+}
